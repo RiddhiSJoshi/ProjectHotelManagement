@@ -114,32 +114,43 @@ def delete_customer(id):
 @app.route("/addbookings", methods=["POST"])
 def create_booking():
     data = request.get_json()
-    room_number = int(data["room_number"])
+    room_id = ObjectId(data["room_id"])
+    customer_id = ObjectId(data["customer_id"])
     check_in = datetime.strptime(data["check_in"], "%d/%m/%Y")
     check_out = datetime.strptime(data["check_out"], "%d/%m/%Y")
+    # Validate date
+    if check_in >= check_out:
+        return jsonify({"error": "Invalid date range"}), 400
 
-    room = rooms.find_one({"room_number": data["room_number"]})
-    
+    # Check room exists
+    room = rooms.find_one({"_id": room_id})
     if not room:
-        return jsonify({"error": "Room does not exist"}), 404
+        return jsonify({"error": "Room not found"}), 404
 
+    # Check customer exists
+    customer = customers.find_one({"_id": customer_id})
+    if not customer:
+        return jsonify({"error": "Customer not found"}), 404
+
+    # Overlap check
     overlapping = bookings.find_one({
-        "room_number": room_number,
+        "room_id": room_id,
         "check_in": {"$lt": check_out},
         "check_out": {"$gt": check_in}
     })
-    if overlapping:
-        return jsonify({"error": "Room already booked for selected dates"}), 400
-    # if room.get("status") == "Occupied":
-    #     return jsonify({"error": "Room already booked"}), 400
-    data["check_in"] = check_in
-    data["check_out"] = check_out
 
-    bookings.insert_one(data)
-    # rooms.update_one(
-    #     {"room_number": data["room_number"]},
-    #     {"$set": {"status": "Occupied"}}
-    # )
+    if overlapping:
+        return jsonify({"error": "Room already booked"}), 400
+    booking_data = {
+        "room_id": room_id,
+        "customer_id": customer_id,
+        "check_in": check_in,
+        "check_out": check_out,
+        "status": "Booked",
+        "created_at": datetime.utcnow()
+    }
+
+    bookings.insert_one(booking_data)
     return jsonify({"message": "Booking created successfully"})
 
 @app.route("/getbookings", methods=["GET"])
@@ -147,43 +158,73 @@ def get_bookings():
     data = []
     for book in bookings.find():
         book["_id"] = str(book["_id"])
+        # Convert additional ObjectIds
+        if "room_id" in book:
+            book["room_id"] = str(book["room_id"])
+
+        if "customer_id" in book:
+            book["customer_id"] = str(book["customer_id"])
+        # Convert datetime
+        if "check_in" in book:
+            book["check_in"] = book["check_in"].strftime("%d/%m/%Y")
+
+        if "check_out" in book:
+            book["check_out"] = book["check_out"].strftime("%d/%m/%Y")
+
+        if "created_at" in book:
+            book["created_at"] = book["created_at"].strftime("%d/%m/%Y %H:%M:%S")
         data.append(book)
     return jsonify(data)
 
 @app.route("/getbooking/<id>", methods=["GET"])
 def get_idbooking(id):
+    try:
+        obj_id = ObjectId(id)
+    except:
+        return jsonify({"error": "Invalid ID format"}), 400
     booking = bookings.find_one({"_id": ObjectId(id)})
     if booking:
         booking["_id"] = str(booking["_id"])
+        booking["room_id"] = str(booking["room_id"])
+        booking["customer_id"] = str(booking["customer_id"])
         return jsonify(booking)
 
     return jsonify({"error": "Booking not found"}), 404
 
 @app.route("/available-rooms", methods=["GET"])
 def available_rooms():
-
-    check_in = datetime.strptime(request.args.get("check_in"), "%d/%m/%Y")
-    check_out = datetime.strptime(request.args.get("check_out"), "%d/%m/%Y")
+   
+   check_in_str = request.args.get("check_in")
+   check_out_str = request.args.get("check_out")
+   # Validate input
+   if not check_in_str or not check_out_str:
+        return jsonify({"error": "check_in and check_out are required"}), 400
+   try:
+        check_in = datetime.strptime(check_in_str, "%d/%m/%Y")
+        check_out = datetime.strptime(check_out_str, "%d/%m/%Y")
+   except ValueError:
+        return jsonify({"error": "Invalid date format. Use DD/MM/YYYY"}), 400
 
     # Find rooms that are already booked in this date range
-    booked_rooms = bookings.find({
+   booked_rooms = bookings.find({
         "check_in": {"$lt": check_out},
         "check_out": {"$gt": check_in}
     })
 
-    booked_room_numbers = [b["room_number"] for b in booked_rooms]
+    # Extract booked room IDs
+   booked_room_ids = [b["room_id"] for b in booked_rooms]
 
     # Get rooms NOT in booked list
-    available = rooms.find({
-        "room_number": {"$nin": booked_room_numbers}
+   available = rooms.find({
+        "room_number": {"$nin": booked_room_ids}
     })
 
-    result = []
-    for room in available:
+   result = []
+   for room in available:
         room["_id"] = str(room["_id"])
         result.append(room)
 
-    return jsonify(result)
+   return jsonify(result)
 
 @app.route("/bookings/<id>", methods=["PUT"])
 def update_bookings(id):

@@ -1,0 +1,35 @@
+Hotel Management using React and Flask
+In Hotel database we have rooms, customers, bookings, and billing collections in MongoDB.
+For Rooms we have data like room number, room type, price, status.
+For customers we have data like customer name, phone number, email address, and address.
+For bookings we have data like check-in, check-out.
+Based on ID we are fetching, updating, and deleting the data.
+Problems:
+If use room number for fetching, updating, and deleting the data.
+Room number can change (e.g., renovation, renaming)
+Not guaranteed unique unless you enforce it
+Business field ≠ database identifier
+Why _id is better:
+Always unique
+Never changes
+Faster queries (indexed by default)
+Industry standard
+Bookings are based on room number and date ranges(check-in and check-out)
+Think of a hotel like this:
+Room 101 → one guest at a time
+Room 102 → another guest at same time
+Hotel can host multiple guests
+Just not in the same room at the same time
+
+
+Scenarios
+What if same room is booked for different dates?
+Condition:
+Existing check-in < New check-out
+Existing check-out > New check-in
+For eg case 1: Different Dates Allowed
+Booking 1: 1-3 March, Booking 2: 5-7 March === No overlap -> Allowed
+case 2: Overlapping Dates Blocked
+Booking 1: 1-5 March, Booking 2: 4-6 March === Overlap -> Blocked
+case 3: Inside Range Blocked
+Booking 1: 1-10 March, Booking 2: 3-5 March === Overlap -> Blocked
